@@ -1,0 +1,11 @@
+[package]
+name = "bing_saver_rs"
+version = "0.1.0"
+authors = ["shaohua.li <wildimagine@qq.com>"]
+
+[dependencies]
+hyper = "0.12.16"
+victoria-dom = "0.1"
+serde = "1.0.80"
+serde_derive = "1.0.80"
+serde_json = "1.0.33"
