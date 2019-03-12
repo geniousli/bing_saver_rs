@@ -3,11 +3,9 @@ extern crate serde;
 extern crate victoria_dom;
 #[macro_use]
 extern crate serde_derive;
+extern crate hyper_tls;
 extern crate serde_json;
 extern crate tokio;
-
-use std::time::{Duration, SystemTime};
-use tokio::prelude::future::join_all;
 
 use hyper::client::{Client, ResponseFuture};
 use hyper::rt::spawn;
@@ -16,10 +14,15 @@ use hyper::Body;
 use hyper::Chunk;
 use hyper::Request;
 use hyper::Uri;
+use hyper_tls::HttpsConnector;
 use serde_json::{Error, Value};
+use std::env;
 use std::fs::File;
 use std::io::prelude::*;
+use std::path::Path;
 use std::str;
+use std::time::{Duration, SystemTime};
+use tokio::prelude::future::join_all;
 use tokio::prelude::Async;
 use victoria_dom::DOM;
 
@@ -71,6 +74,11 @@ fn main() {
     //     );
     //     download_img(url);
     // }
+    let path = match env::args().nth(1) {
+        Some(value) => value,
+        None => "./".to_string(),
+    };
+
     download_all_img(timestamp);
 }
 
@@ -140,37 +148,71 @@ fn download_all_img(timestamp: u64) {
             .and_then(|body| {
                 let data = ::std::str::from_utf8(&body).expect("httpbin sends utf-8 JSON");
                 let hash: Value = serde_json::from_str(data).unwrap();
-                let url = hash
-                    .get("images")
-                    .unwrap()
-                    .get(0)
-                    .unwrap()
-                    .get("url")
-                    .unwrap()
-                    .as_str()
-                    .unwrap();
 
-                let pic_url = format!("{}{}", HOSTURL, url);
-                let pic_client = Client::builder().keep_alive(false).build_http();
-                let mut pic_request = Request::new(Body::empty());
-                *pic_request.uri_mut() = pic_url.parse::<Uri>().unwrap();
+                let container = hash.get("images").unwrap().get(0).unwrap();
+                let url = container.get("url").unwrap().as_str().unwrap();
+                let copyright = container.get("copyright").unwrap().as_str().unwrap();
+                let path = match env::args().nth(1) {
+                    Some(value) => value,
+                    None => "./".to_string(),
+                };
 
-                let url_split = url.split("/").collect::<Vec<&str>>();
-                let file_name = Box::new(url_split.last().unwrap().to_string());
-                let fu = pic_client
-                    .request(pic_request)
-                    .and_then(|res| res.into_body().concat2())
-                    .and_then(move |body| {
-                        let mut file = File::create(file_name.to_string()).unwrap();
-                        file.write_all(&body);
-                        Ok(())
-                    })
-                    .map_err(|err| {
-                        println!("error: {}", err);
-                    });
+                let file_name = match copyright.find("(") {
+                    Some(index) => format!("{}/{}.jpg", path, copyright[0..index].to_string()),
+                    None => format!("{}/{}.jpg", path, copyright.to_string()),
+                };
 
-                rt::spawn(fu);
-                Ok(())
+                let pic_url = match url.find("https") {
+                    Some(_) => url.to_string(),
+                    None => format!("{}{}", HOSTURL, url),
+                };
+
+                println!("hash is -- {}", pic_url);
+                let is_https = pic_url.find("https");
+                if let Some(_) = is_https {
+                    let https = HttpsConnector::new(4).unwrap();
+                    let pic_client = Client::builder().build::<_, hyper::Body>(https);
+                    let mut pic_request = Request::new(Body::empty());
+                    *pic_request.uri_mut() = pic_url.parse::<Uri>().unwrap();
+
+                    let url_split = url.split("/").collect::<Vec<&str>>();
+                    // let file_name = Box::new(url_split.last().unwrap().to_string());
+                    let fu = pic_client
+                        .request(pic_request)
+                        .and_then(|res| res.into_body().concat2())
+                        .and_then(move |body| {
+                            let mut file = File::create(file_name.to_string()).unwrap();
+                            file.write_all(&body);
+                            Ok(())
+                        })
+                        .map_err(|err| {
+                            println!("error: {}", err);
+                        });
+
+                    rt::spawn(fu);
+                    Ok(())
+                } else {
+                    let pic_client = Client::builder().keep_alive(false).build_http();
+                    let mut pic_request = Request::new(Body::empty());
+                    *pic_request.uri_mut() = pic_url.parse::<Uri>().unwrap();
+
+                    let url_split = url.split("/").collect::<Vec<&str>>();
+                    // let file_name = Box::new(url_split.last().unwrap().to_string());
+                    let fu = pic_client
+                        .request(pic_request)
+                        .and_then(|res| res.into_body().concat2())
+                        .and_then(move |body| {
+                            let mut file = File::create(file_name.to_string()).unwrap();
+                            file.write_all(&body);
+                            Ok(())
+                        })
+                        .map_err(|err| {
+                            println!("error: {}", err);
+                        });
+
+                    rt::spawn(fu);
+                    Ok(())
+                }
             })
             .map_err(|err| {
                 println!("error: {}", err);
