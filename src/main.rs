@@ -82,53 +82,53 @@ fn main() {
     download_all_img(timestamp);
 }
 
-struct BingDownloadPic {
-    pics: Vec<ResponseFuture>,
-    pic_urls: Box<Vec<String>>,
-}
+// struct BingDownloadPic {
+//     pics: Vec<ResponseFuture>,
+//     pic_urls: Box<Vec<String>>,
+// }
 
-impl Future for BingDownloadPic {
-    type Item = ();
-    type Error = ();
-    fn poll(&mut self) -> Result<Async<Self::Item>, Self::Error> {
-        use std::fmt::Error;
-        for pic in self.pics.iter_mut() {
-            let res = pic.poll();
-            if res.is_err() {
-                return Err(());
-            } else {
-                match res {
-                    Ok(Async::Ready(data)) => {
-                        let fut = data
-                            .into_body()
-                            .concat2()
-                            .and_then(|x| {
-                                let data =
-                                    ::std::str::from_utf8(&x).expect("httpbin sends utf-8 JSON");
-                                let hash: Value = serde_json::from_str(data).unwrap();
-                                let url = hash
-                                    .get("images")
-                                    .unwrap()
-                                    .get(0)
-                                    .unwrap()
-                                    .get("url")
-                                    .unwrap()
-                                    .as_str()
-                                    .unwrap();
-                                let pic_url = format!("{}{}", HOSTURL, url);
-                                // println!("url is ----- {}", pic_url);
-                                Ok(())
-                            })
-                            .map_err(|err| println!("errors -"));
-                        rt::spawn(fut);
-                    }
-                    _ => return Ok(Async::NotReady),
-                }
-            }
-        }
-        Ok(Async::Ready(()))
-    }
-}
+// impl Future for BingDownloadPic {
+//     type Item = ();
+//     type Error = ();
+//     fn poll(&mut self) -> Result<Async<Self::Item>, Self::Error> {
+//         use std::fmt::Error;
+//         for pic in self.pics.iter_mut() {
+//             let res = pic.poll();
+//             if res.is_err() {
+//                 return Err(());
+//             } else {
+//                 match res {
+//                     Ok(Async::Ready(data)) => {
+//                         let fut = data
+//                             .into_body()
+//                             .concat2()
+//                             .and_then(|x| {
+//                                 let data =
+//                                     ::std::str::from_utf8(&x).expect("httpbin sends utf-8 JSON");
+//                                 let hash: Value = serde_json::from_str(data).unwrap();
+//                                 let url = hash
+//                                     .get("images")
+//                                     .unwrap()
+//                                     .get(0)
+//                                     .unwrap()
+//                                     .get("url")
+//                                     .unwrap()
+//                                     .as_str()
+//                                     .unwrap();
+//                                 let pic_url = format!("{}{}", HOSTURL, url);
+//                                 // println!("url is ----- {}", pic_url);
+//                                 Ok(())
+//                             })
+//                             .map_err(|err| println!("errors -"));
+//                         rt::spawn(fut);
+//                     }
+//                     _ => return Ok(Async::NotReady),
+//                 }
+//             }
+//         }
+//         Ok(Async::Ready(()))
+//     }
+// }
 
 fn download_all_img(timestamp: u64) {
     let mut ary = Vec::new();
@@ -158,8 +158,12 @@ fn download_all_img(timestamp: u64) {
                 };
 
                 let file_name = match copyright.find("(") {
-                    Some(index) => format!("{}/{}.jpg", path, copyright[0..index].to_string()),
-                    None => format!("{}/{}.jpg", path, copyright.to_string()),
+                    Some(index) => format!(
+                        "{}/{}.jpg",
+                        path,
+                        copyright[0..index].to_string().replace("/", "_")
+                    ),
+                    None => format!("{}/{}.jpg", path, copyright.to_string().replace("/", "_")),
                 };
 
                 let pic_url = match url.find("https") {
@@ -202,6 +206,7 @@ fn download_all_img(timestamp: u64) {
                         .request(pic_request)
                         .and_then(|res| res.into_body().concat2())
                         .and_then(move |body| {
+                            println!("file_Name {}", file_name);
                             let mut file = File::create(file_name.to_string()).unwrap();
                             file.write_all(&body);
                             Ok(())
@@ -224,51 +229,51 @@ fn download_all_img(timestamp: u64) {
     rt::run(f)
 }
 
-fn download_img(url: String) {
-    let mut request = Request::new(Body::empty());
-    *request.uri_mut() = url.parse::<Uri>().unwrap();
-    let client = Client::builder().keep_alive(false).build_http();
+// fn download_img(url: String) {
+//     let mut request = Request::new(Body::empty());
+//     *request.uri_mut() = url.parse::<Uri>().unwrap();
+//     let client = Client::builder().keep_alive(false).build_http();
 
-    let fut = client
-        .request(request)
-        .and_then(|res| res.into_body().concat2())
-        .and_then(|body| {
-            let data = ::std::str::from_utf8(&body).expect("httpbin sends utf-8 JSON");
-            let hash: Value = serde_json::from_str(data).unwrap();
-            let url = hash
-                .get("images")
-                .unwrap()
-                .get(0)
-                .unwrap()
-                .get("url")
-                .unwrap()
-                .as_str()
-                .unwrap();
+//     let fut = client
+//         .request(request)
+//         .and_then(|res| res.into_body().concat2())
+//         .and_then(|body| {
+//             let data = ::std::str::from_utf8(&body).expect("httpbin sends utf-8 JSON");
+//             let hash: Value = serde_json::from_str(data).unwrap();
+//             let url = hash
+//                 .get("images")
+//                 .unwrap()
+//                 .get(0)
+//                 .unwrap()
+//                 .get("url")
+//                 .unwrap()
+//                 .as_str()
+//                 .unwrap();
 
-            let pic_url = format!("{}{}", HOSTURL, url);
-            let pic_client = Client::builder().keep_alive(false).build_http();
-            let mut pic_request = Request::new(Body::empty());
-            *pic_request.uri_mut() = pic_url.parse::<Uri>().unwrap();
+//             let pic_url = format!("{}{}", HOSTURL, url);
+//             let pic_client = Client::builder().keep_alive(false).build_http();
+//             let mut pic_request = Request::new(Body::empty());
+//             *pic_request.uri_mut() = pic_url.parse::<Uri>().unwrap();
 
-            let url_split = url.split("/").collect::<Vec<&str>>();
-            let file_name = Box::new(url_split.last().unwrap().to_string());
-            let fu = pic_client
-                .request(pic_request)
-                .and_then(|res| res.into_body().concat2())
-                .and_then(move |body| {
-                    let mut file = File::create(file_name.to_string()).unwrap();
-                    file.write_all(&body);
-                    Ok(())
-                })
-                .map_err(|err| {
-                    println!("error: {}", err);
-                });
+//             let url_split = url.split("/").collect::<Vec<&str>>();
+//             let file_name = Box::new(url_split.last().unwrap().to_string());
+//             let fu = pic_client
+//                 .request(pic_request)
+//                 .and_then(|res| res.into_body().concat2())
+//                 .and_then(move |body| {
+//                     let mut file = File::create(file_name.to_string()).unwrap();
+//                     file.write_all(&body);
+//                     Ok(())
+//                 })
+//                 .map_err(|err| {
+//                     println!("error: {}", err);
+//                 });
 
-            rt::spawn(fu);
-            Ok(())
-        })
-        .map_err(|err| {
-            println!("error: {}", err);
-        });
-    rt::run(fut)
-}
+//             rt::spawn(fu);
+//             Ok(())
+//         })
+//         .map_err(|err| {
+//             println!("error: {}", err);
+//         });
+//     rt::run(fut)
+// }
